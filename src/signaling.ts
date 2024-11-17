@@ -1,42 +1,51 @@
-import { Server } from "socket.io";
+import { Server, Socket } from "socket.io";
 
 export const handleSignaling = (io: Server) => {
-  let connectedUsers: string[] = []; // Track connected users
-  const users: any = {};
-  const rooms: Record<string, string[]> = {}; // Store room ID with user list
+  const users = new Map<string, string>(); // socketId -> username
 
-  io.on("connection", (socket) => {
-    console.log("A user connected:", socket.id);
-    let userId = socket.handshake.query.userId;
-    // Add the new user to the list
-    connectedUsers.push(socket.id);
+  let connectedUsers: string[] = [];
 
-    // Emit the updated user list along with the current user ID to all clients
-    io.emit("userList", connectedUsers, socket.id);
+  io.on("connection", (socket: Socket) => {
+    console.log("User connected:", socket.id);
 
-    // Notify all clients about the new user
-    io.emit("user-connected", socket.id);
+    // Handle username registration
+    socket.on("register", (username: string) => {
+      users.set(socket.id, username);
+      io.emit("users", Array.from(users.entries())); // Send updated user list
+      console.log(username, socket.id);
+      connectedUsers.push(username);
+      io.emit("userList", connectedUsers);
+      console.log(connectedUsers);
+    });
+    // Handle WebRTC offer
+    socket.on("offer", (data: { to: string; offer: any }) => {
+      socket.to(data.to).emit("offer", {
+        from: socket.id,
+        offer: data.offer,
+      });
+    });
 
+    // Handle WebRTC answer
+    socket.on("answer", (data: { to: string; answer: any }) => {
+      socket.to(data.to).emit("answer", {
+        from: socket.id,
+        answer: data.answer,
+      });
+    });
+
+    // Handle ICE candidates
+    socket.on("ice-candidate", (data: { to: string; candidate: any }) => {
+      socket.to(data.to).emit("ice-candidate", {
+        from: socket.id,
+        candidate: data.candidate,
+      });
+    });
+
+    // Handle disconnection
     socket.on("disconnect", () => {
-      console.log("A user disconnected:", socket.id);
-      // Remove the disconnected user from the list
-      connectedUsers = connectedUsers.filter((id) => id !== socket.id);
-      // Emit the updated user list to all clients
-      io.emit("userList", connectedUsers, socket.id);
-      io.emit("user-disconnected", socket.id);
-    });
-
-    // Handle WebRTC signaling (offer, answer, ice-candidate)
-    socket.on("offer", (data) => {
-      socket.to(data.targetId).emit("offer", data);
-    });
-
-    socket.on("answer", (data) => {
-      socket.to(data.targetId).emit("answer", data);
-    });
-
-    socket.on("ice-candidate", (data) => {
-      socket.to(data.targetId).emit("ice-candidate", data);
+      users.delete(socket.id);
+      io.emit("users", Array.from(users.entries())); // Send updated user list
+      console.log("User disconnected:", socket.id);
     });
   });
 };

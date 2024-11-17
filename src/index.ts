@@ -48,5 +48,5 @@ handleSignaling(io);
 
 const PORT = 443;
 server.listen(PORT, () => {
-  console.log(`Server is running on https://localhost:${PORT}`);
+  console.log(`Server is running on https://0.0.0.0:${PORT}`);
 });
